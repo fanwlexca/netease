@@ -47,6 +47,19 @@ class JsonParser:
 		self.json = ''
 		self.d = {}
 
+	def __getitem__(self, key):
+		"""
+		using '[]' to read
+		"""
+		return self.d[key]
+
+	def __setitem__(self, key, value):
+		"""
+		using '[]' to assign
+		"""
+		self.d[key] = value
+		self.dictToJson()
+
 	def load(self, s):
 		"""
 		load string s in JSON format
@@ -107,6 +120,15 @@ class JsonParser:
 		"""
 		self.json = decodeObj(self.d)
 
+	def update(self, d):
+		"""
+		update self.d according to d
+		"""
+		for key in d:
+			if isinstance(key, unicode):
+				self.d[key] = copy.deepcopy(d[key])
+		self.dictToJson()
+
 def encodeVal(value):
 	"""
 	encode each value
@@ -120,7 +142,7 @@ def encodeVal(value):
 		result = encodeStr(value)
 	elif value[0] == '-' or value[0].isdigit():
 		result = eval(value)
-		if result > sys.float_info.max or result < sys.float_info.min:
+		if result > sys.float_info.max or result < -sys.float_info.max:
 			raise FormatError('Json format error: float overflow')
 	elif value == 'true':
 			result = True
@@ -192,8 +214,6 @@ def mysplit(s, isobj):
 	while s:
 		if isobj:
 			p = objSplit(s)
-			#if p == -1:
-				#raise FormatError('Json format error: object format error')
 			item += s[:p+1]
 			s = s[p+1:]
 		s = s.lstrip()
@@ -215,6 +235,22 @@ def mysplit(s, isobj):
 				s = ''
 			else:
 				s = s[left+1:]
+		elif s[0] == '"':
+			p = 1
+			while s[p] != '"':
+				if s[p] == '\\':
+					p += 2
+				else:
+					p += 1
+			item += s[:p+1]
+			s = s[p+1:]
+			left = s.find(',')
+			if left != -1:
+				item += s[:left]
+				s = s[left+1:]
+			else:
+				item += s[:-1]
+				s = ''
 		else:
 			left = s.find(',')
 			if left != -1:
@@ -228,11 +264,17 @@ def mysplit(s, isobj):
 		item = ''
 
 def objSplit(s):
+	"""
+	split each item in object
+	"""
 	if s.find(':') == -1:
 		return -1
 	p = s.find('"') + 1 
-	while not (s[p] == '"' and s[p-1] != '\\'):
-		p += 1
+	while s[p] != '"':
+		if s[p] == '\\':
+			p += 2
+		else:
+			p += 1
 	result = p
 	s = s[p+1:]
 	p = s.find(':')
@@ -240,13 +282,19 @@ def objSplit(s):
 	return result
 
 def myfind(s, tar1, tar2):
+	"""
+	find matched '{}' or '[]'
+	"""
 	count = 1
 	p = 1 
 	while p != len(s) and count != 0:
 		if s[p] == '"':
 			p += 1
-			while not (s[p] == '"' and s[p-1] != '\\'):
-				p += 1
+			while s[p] != '"':
+				if s[p] == '\\':
+					p += 2
+				else:
+					p += 1
 		elif s[p] == tar1:
 			count += 1
 		elif s[p] == tar2:
@@ -257,6 +305,9 @@ def myfind(s, tar1, tar2):
 	return p-1
 
 def decodeVal(value):
+	"""
+	decode each value
+	"""
 	if isinstance(value, dict):
 		result = decodeObj(value)
 	elif isinstance(value, list):
@@ -271,18 +322,18 @@ def decodeVal(value):
 	elif value == None:
 		result = 'null'
 	elif isinstance(value, int) or isinstance(value, float):
-		if value > sys.float_info.max or value < sys.float_info.min:
+		if value > sys.float_info.max or value < -sys.float_info.max:
 			result = 'null'
 		else:
-			if isinstance(value, int):
-				result = str(value)
-			else:
-				result = '%e' % value
+			result = str(value)
 	else:
 		raise FormatError('Dict format error')
 	return result
 
 def decodeObj(d):
+	"""
+	decode object
+	"""
 	if not d:
 		return '{}'
 	json = '{'
@@ -296,6 +347,9 @@ def decodeObj(d):
 	return json
 
 def decodeArr(l):
+	"""
+	decode array
+	"""
 	if not l:
 		return '[]'
 	json = '['
@@ -307,30 +361,18 @@ def decodeArr(l):
 	return json
 
 def decodeStr(s):
-	print 'decodeStr:', s
+	"""
+	decode string
+	"""
 	json = '"'
 	for i in s:
 		if ESCAPE_DCT.has_key(i):
 			json += ESCAPE_DCT[i]
 		elif ord(i) >= 0x21 and ord(i) <= 0x7e:
 			json += i.encode('utf-8')
+		elif ord(i) == 0x20:
+			json += i.encode('utf-8')
 		else:
 			json += '\\u%04x' % ord(i)
 	json += '"'
 	return json
-
-if __name__ == '__main__':
-	a1 = JsonParser()
-	test_json_str = '{ "\\tfm\\r": { "\\"fwl\\t": "\\/son\\u1234", "age\\b": 50 }, "\\ffwl": [ null, true, false, {}, [] ], "\\ncjp": null }'
-	a1.load(test_json_str)
-	a1.dumpJson('test')
-	myd = a1.dumpDict()
-	print 'myd1:', myd
-	a2 = JsonParser()
-	a2.loadJson('test')
-	myd2 = a2.dumpDict()
-	print 'myd2:', myd2
-	a3 = JsonParser()
-	a3.loadDict(myd)
-	a3.dumpJson('test2')
-	print a3.dump()

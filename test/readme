@@ -1,0 +1,11 @@
+使用说明：
+	1. load(self, s)读取JSON格式字符串：s为JSON格式字符串(utf-8)，格式错误抛出FormatError异常，所有字符串保存成unicode字符串（注：转义需使用'\\'而非'\'，e.g.: {"\\ntest": null}）。
+	2. dump(self)根据类中数据返回JSON格式字符串。
+	3. loadJson(self, f)从文件中读取JSON数据：f为文件路径字符串，文件操作失败返回异常。
+	4. dumpJson(self, f)将类中内容以JSON格式存入文件f：f为文件路径字符串，文件若存在则覆盖，文件操作失败返回异常。
+	5. loadDict(self, d)读取d中数据，存入类。遇到不是unicode字符串的key则忽略。
+	6. dumpDict(self)返回类中数据转化成的字典。
+	7. update(self, d)使用d更新类中数据，类似字典的update。
+	8. 支持使用[]进行赋值，读写操作。
+
+使用样例见test.py
