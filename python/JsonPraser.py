@@ -5,13 +5,14 @@ Implementation of JsonParser
 import sys, copy
 
 ESCAPE_DCT = {
-		'\\' : '\\\\',
-		'"' : '\\"',
-		'\b' : '\\b',
-		'\f' : '\\f',
-		'\n' : '\\n',
-		'\r' : '\\r',
-		'\t' : '\\t',
+		u'"' : '\\"',
+		u'\\' : '\\\\',
+		u'/' : '\\/',
+		u'\b' : '\\b',
+		u'\f' : '\\f',
+		u'\n' : '\\n',
+		u'\r' : '\\r',
+		u'\t' : '\\t',
 }
 
 BACKSLASH = {
@@ -27,6 +28,9 @@ BACKSLASH = {
 
 
 class FormatError(Exception):
+	"""
+	FormatError Exception
+	"""
 	pass
 
 class JsonParser:
@@ -48,7 +52,7 @@ class JsonParser:
 		load string s in JSON format
 		"""
 		self.json = s
-		self.jsonToDict(self.json)
+		self.jsonToDict()
 
 	def dump(self):
 		"""
@@ -62,7 +66,7 @@ class JsonParser:
 		"""
 		with open(f) as mFile:
 			self.load(mFile.read())
-		self.jsonToDict(self.json)
+		self.jsonToDict()
 
 	def dumpJson(self, f):
 		"""
@@ -86,32 +90,34 @@ class JsonParser:
 		"""
 		return copy.deepcopy(self.d)
 
-	def jsonToDict(self, s):
+	def jsonToDict(self):
 		"""
 		transform json to dict
 		"""
+		s = self.json
 		s = s.strip()
 		if s[0] == '{' and s[-1] == '}':
-			self.d = conductObj(s)
+			self.d = encodeObj(s)
 		else:
 			raise FormatError('Json format error: outermost layer must be object')
 
-	def dictToJson():
+	def dictToJson(self):
 		"""
 		transform dict to json
 		"""
+		self.json = decodeObj(self.d)
 
-def conductVal(value):
+def encodeVal(value):
 	"""
-	conduct each value
+	encode each value
 	"""
 	value = value.strip()
 	if value[0] == '{' and value[-1] == '}':
-		result = conductObj(value)
+		result = encodeObj(value)
 	elif value[0] == '[' and value[-1] == ']':
-		result = conductArr(value)
+		result = encodeArr(value)
 	elif value[0] == '"' and value[-1] == '"':
-		result = conductStr(value)
+		result = encodeStr(value)
 	elif value[0] == '-' or value[0].isdigit():
 		result = eval(value)
 		if result > sys.float_info.max or result < sys.float_info.min:
@@ -126,9 +132,9 @@ def conductVal(value):
 		raise FormatError('Json format error: value format error')
 	return result
 
-def conductObj(s):
+def encodeObj(s):
 	"""
-	conduct object
+	encode object
 	"""
 	d = {}
 	s = s[1:]
@@ -138,23 +144,23 @@ def conductObj(s):
 			raise FormatError('Json format error: object format error')
 		key = item[:mid].strip()
 		value = item[mid+1:]
-		key = conductStr(key)
-		d[key] = conductVal(value)
+		key = encodeStr(key)
+		d[key] = encodeVal(value)
 	return d
 
-def conductArr(s):
+def encodeArr(s):
 	"""
-	conduct array
+	encode array
 	"""
 	arr = []
 	s = s[1:]
 	for item in mysplit(s, False):
-		arr.append(conductVal(item))
+		arr.append(encodeVal(item))
 	return arr
 
-def conductStr(s):
+def encodeStr(s):
 	"""
-	conduct string
+	encode string
 	"""
 	if not (s[0] == '"' and s[-1] == '"'):
 		raise FormatError('Json format error: string format error')
@@ -233,7 +239,6 @@ def objSplit(s):
 	result += p + 1
 	return result
 
-
 def myfind(s, tar1, tar2):
 	count = 1
 	p = 1 
@@ -251,12 +256,72 @@ def myfind(s, tar1, tar2):
 		raise FormatError('Json format error: not enough %s%s' % (tar1, tar2))
 	return p-1
 
+def decodeVal(value):
+	if isinstance(value, dict):
+		result = decodeObj(value)
+	elif isinstance(value, list):
+		result = decodeArr(value)
+	elif isinstance(value, unicode):
+		result = decodeStr(value)
+	elif isinstance(value, bool):
+		if value == True:
+			result = 'true'
+		else:
+			result = 'false'
+	elif value == None:
+		result = 'null'
+	elif isinstance(value, int) or isinstance(value, float):
+		if value > sys.float_info.max or value < sys.float_info.min:
+			result = 'null'
+		else:
+			if isinstance(value, int):
+				result = str(value)
+			else:
+				result = '%e' % value
+	else:
+		raise FormatError('Dict format error')
+	return result
 
+def decodeObj(d):
+	if not d:
+		return '{}'
+	json = '{'
+	for key in d:
+		json += decodeStr(key)
+		json += ': '
+		json += decodeVal(d[key])
+		json += ', '
+	json = json[:-2]
+	json += '}'
+	return json
 
+def decodeArr(l):
+	if not l:
+		return '[]'
+	json = '['
+	for i in l:
+		json += decodeVal(i)
+		json += ', '
+	json = json[:-2]
+	json += ']'
+	return json
+
+def decodeStr(s):
+	print 'decodeStr:', s
+	json = '"'
+	for i in s:
+		if ESCAPE_DCT.has_key(i):
+			json += ESCAPE_DCT[i]
+		elif ord(i) >= 0x21 and ord(i) <= 0x7e:
+			json += i.encode('utf-8')
+		else:
+			json += '\\u%04x' % ord(i)
+	json += '"'
+	return json
 
 if __name__ == '__main__':
 	a1 = JsonParser()
-	test_json_str = '{ "\\tfm\\r": { "\\"fwl\\t": "\\/son\\u1234", "age\\b": 50 }, "\\ffwl": [ null, {}, [] ], "\\ncjp": null }'
+	test_json_str = '{ "\\tfm\\r": { "\\"fwl\\t": "\\/son\\u1234", "age\\b": 50 }, "\\ffwl": [ null, true, false, {}, [] ], "\\ncjp": null }'
 	a1.load(test_json_str)
 	a1.dumpJson('test')
 	myd = a1.dumpDict()
@@ -265,3 +330,7 @@ if __name__ == '__main__':
 	a2.loadJson('test')
 	myd2 = a2.dumpDict()
 	print 'myd2:', myd2
+	a3 = JsonParser()
+	a3.loadDict(myd)
+	a3.dumpJson('test2')
+	print a3.dump()
